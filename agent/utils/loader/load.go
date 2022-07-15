@@ -11,17 +11,19 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package serviceconnect
+package loader
 
 import (
-	apicontainer "github.com/aws/amazon-ecs-agent/agent/api/container"
-	apitask "github.com/aws/amazon-ecs-agent/agent/api/task"
+	"context"
+
 	"github.com/aws/amazon-ecs-agent/agent/config"
-	dockercontainer "github.com/docker/docker/api/types/container"
+	"github.com/aws/amazon-ecs-agent/agent/dockerclient/dockerapi"
+	"github.com/docker/docker/api/types"
 )
 
-type Manager interface {
-	AugmentTaskContainer(task *apitask.Task, container *apicontainer.Container, hostConfig *dockercontainer.HostConfig) error
-	CreateInstanceTask(config *config.Config) (*apitask.Task, error)
-	AugmentInstanceContainer(task *apitask.Task, container *apicontainer.Container, hostConfig *dockercontainer.HostConfig) error
+// Loader defines an interface for loading the appnetAgent container image. This is mostly
+// to facilitate mocking and testing of the LoadImage method
+type Loader interface {
+	LoadImage(ctx context.Context, cfg *config.Config, dockerClient dockerapi.DockerClient) (*types.ImageInspect, error)
+	IsLoaded(dockerClient dockerapi.DockerClient) (bool, error)
 }
