@@ -75,9 +75,12 @@ type manager struct {
 	adminStatsRequest string
 	// Http path + params to make a drain request of AppNetAgent
 	adminDrainRequest string
+
+	// Loader for the AppNet container
+	serviceConnectLoader serviceconnect.Loader
 }
 
-func NewManager() Manager {
+func NewManager(serviceConnectLoader serviceconnect.Loader) Manager {
 	return &manager{
 		relayPathContainer:  defaultRelayPathContainer,
 		relayPathHost:       defaultRelayPathHost,
@@ -89,6 +92,8 @@ func NewManager() Manager {
 		statusENV:           defaultStatusENV,
 		adminStatsRequest:   defaultAdminStatsRequest,
 		adminDrainRequest:   defaultAdminDrainRequest,
+
+		serviceConnectLoader: serviceConnectLoader,
 	}
 }
 
@@ -197,7 +202,7 @@ func DNSConfigToDockerExtraHostsFormat(dnsConfigs []apiserviceconnect.DNSConfigE
 	return hosts
 }
 
-func (m *manager) AugmentTaskContainer(task *apitask.Task, container *apicontainer.Container, hostConfig *dockercontainer.HostConfig, serviceConnectLoader serviceconnect.Loader) error {
+func (m *manager) AugmentTaskContainer(task *apitask.Task, container *apicontainer.Container, hostConfig *dockercontainer.HostConfig) error {
 	var err error
 	// Add SC VIPs to pause container's known hosts
 	if container.Type == apicontainer.ContainerCNIPause {
@@ -205,13 +210,13 @@ func (m *manager) AugmentTaskContainer(task *apitask.Task, container *apicontain
 			DNSConfigToDockerExtraHostsFormat(task.ServiceConnectConfig.DNSConfig)...)
 	}
 	if container == task.GetServiceConnectContainer() {
-		m.augmentAgentContainer(task, container, hostConfig, serviceConnectLoader)
+		m.augmentAgentContainer(task, container, hostConfig, m.serviceConnectLoader)
 	}
 	return err
 }
 
-func (m *manager) CreateInstanceTask(cfg *config.Config, serviceConnectLoader serviceconnect.Loader) (*apitask.Task, error) {
-	imageName, err := serviceConnectLoader.GetLoadedImageName()
+func (m *manager) CreateInstanceTask(cfg *config.Config) (*apitask.Task, error) {
+	imageName, err := m.serviceConnectLoader.GetLoadedImageName()
 	if err != nil {
 		return nil, err
 	}

@@ -29,7 +29,7 @@ import (
 type manager struct {
 }
 
-func NewManager() Manager {
+func NewManager(serviceConnectLoader serviceconnect.Loader) Manager {
 	return &manager{}
 }
 
