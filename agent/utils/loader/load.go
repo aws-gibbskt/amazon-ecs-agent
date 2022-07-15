@@ -16,6 +16,7 @@ package loader
 import (
 	"context"
 
+	"github.com/aws/amazon-ecs-agent/agent/config"
 	"github.com/aws/amazon-ecs-agent/agent/dockerclient/dockerapi"
 	"github.com/docker/docker/api/types"
 )
@@ -23,6 +24,6 @@ import (
 // Loader defines an interface for loading the appnetAgent container image. This is mostly
 // to facilitate mocking and testing of the LoadImage method
 type Loader interface {
-	LoadImage(ctx context.Context, dockerClient dockerapi.DockerClient) (*types.ImageInspect, error)
+	LoadImage(ctx context.Context, cfg *config.Config, dockerClient dockerapi.DockerClient) (*types.ImageInspect, error)
 	IsLoaded(dockerClient dockerapi.DockerClient) (bool, error)
 }
