@@ -30,7 +30,7 @@ import (
 )
 
 // LoadImage helps load the pause container image for the agent
-func (*loader) LoadImage(ctx context.Context, cfg *config.Config, dockerClient dockerapi.DockerClient) (*types.ImageInspect, error) {
+func (*pauseLoader) LoadImage(ctx context.Context, cfg *config.Config, dockerClient dockerapi.DockerClient) (*types.ImageInspect, error) {
 	log.Debugf("Loading pause container tarball: %s", cfg.PauseContainerTarballPath)
 	if err := loadFromFile(ctx, cfg.PauseContainerTarballPath, dockerClient); err != nil {
 		return nil, err
@@ -40,7 +40,7 @@ func (*loader) LoadImage(ctx context.Context, cfg *config.Config, dockerClient d
 		config.DefaultPauseContainerImageName, config.DefaultPauseContainerTag, dockerClient)
 }
 
-func (*loader) IsLoaded(dockerClient dockerapi.DockerClient) (bool, error) {
+func (*pauseLoader) IsLoaded(dockerClient dockerapi.DockerClient) (bool, error) {
 	return isImageLoaded(dockerClient)
 }
 
