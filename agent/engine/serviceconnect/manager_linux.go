@@ -14,10 +14,19 @@
 package serviceconnect
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
+
+	"github.com/aws/aws-sdk-go/aws"
+
+	apitaskstatus "github.com/aws/amazon-ecs-agent/agent/api/task/status"
+
+	apicontainerstatus "github.com/aws/amazon-ecs-agent/agent/api/container/status"
+
+	"github.com/aws/amazon-ecs-agent/agent/taskresource"
 
 	apicontainer "github.com/aws/amazon-ecs-agent/agent/api/container"
 	apiserviceconnect "github.com/aws/amazon-ecs-agent/agent/api/serviceconnect"
@@ -97,7 +106,7 @@ func NewManager(serviceConnectLoader serviceconnect.Loader) Manager {
 	}
 }
 
-func (m *manager) augmentAgentContainer(task *apitask.Task, container *apicontainer.Container, hostConfig *dockercontainer.HostConfig, serviceConnectoader serviceconnect.Loader) error {
+func (m *manager) augmentAgentContainer(task *apitask.Task, container *apicontainer.Container, hostConfig *dockercontainer.HostConfig, serviceConnectLoader serviceconnect.Loader) error {
 	if task.IsNetworkModeBridge() {
 		err := m.initServiceConnectContainerMapping(task, container, hostConfig)
 		if err != nil {
@@ -117,7 +126,7 @@ func (m *manager) augmentAgentContainer(task *apitask.Task, container *apicontai
 	config.DrainRequest = m.adminDrainRequest
 
 	task.PopulateServiceConnectRuntimeConfig(config)
-	container.Image, _ = serviceConnectoader.GetLoadedImageName()
+	container.Image, _ = serviceConnectLoader.GetLoadedImageName()
 	return nil
 }
 
@@ -178,7 +187,7 @@ func (m *manager) initRelayEnvironment(config *config.Config, container *apicont
 		agentModeENV:   agentModeValue,
 		relayEnableENV: relayEnableOn,
 		// TODO: get programmatically when available
-		m.endpointENV: "ecs-sc-gamma.us-west-2.api.aws",
+		m.endpointENV: "https://ecs-sc-gamma.us-west-2.api.aws",
 	}
 
 	container.MergeEnvironmentVariables(scEnv)
@@ -220,19 +229,29 @@ func (m *manager) CreateInstanceTask(cfg *config.Config) (*apitask.Task, error) 
 	if err != nil {
 		return nil, err
 	}
-	task := &apitask.Task{
-		Arn: "arn:::::/service-connect-relay",
-		Containers: []*apicontainer.Container{{
-			Name:              "instance-service-connect-relay",
-			Image:             imageName,
-			NetworkModeUnsafe: "host",
-			ContainerArn:      "arn:::::/instance-service-connect-relay",
-			Type:              apicontainer.ContainerServiceConnectRelay,
-		}},
-		LaunchType:  "EC2",
-		NetworkMode: "host",
+	containerRunning := apicontainerstatus.ContainerRunning
+	dockerHostConfig := dockercontainer.HostConfig{NetworkMode: apitask.HostNetworkMode}
+	rawHostConfig, err := json.Marshal(&dockerHostConfig)
+	if err != nil {
+		return nil, err
 	}
-
+	task := &apitask.Task{
+		Arn:                 "arn:::::/service-connect-relay",
+		DesiredStatusUnsafe: apitaskstatus.TaskRunning,
+		Containers: []*apicontainer.Container{{
+			Name:                      "instance-service-connect-relay",
+			Image:                     imageName,
+			ContainerArn:              "arn:::::/instance-service-connect-relay",
+			Type:                      apicontainer.ContainerServiceConnectRelay,
+			TransitionDependenciesMap: make(map[apicontainerstatus.ContainerStatus]apicontainer.TransitionDependencySet),
+			Essential:                 true,
+			SteadyStateStatusUnsafe:   &containerRunning,
+			DockerConfig:              apicontainer.DockerConfig{HostConfig: aws.String(string(rawHostConfig))},
+		}},
+		LaunchType:         "EC2",
+		NetworkMode:        apitask.HostNetworkMode,
+		ResourcesMapUnsafe: make(map[string][]taskresource.TaskResource),
+	}
 	m.initRelayEnvironment(cfg, task.Containers[0])
 
 	return task, nil
