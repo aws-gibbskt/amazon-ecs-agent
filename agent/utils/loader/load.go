@@ -11,6 +11,19 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package pause
+package loader
 
-//go:generate mockgen -destination=mocks/load_mocks.go -copyright_file=../../../scripts/copyright_file github.com/aws/amazon-ecs-agent/agent/eni/pause Loader
+import (
+	"context"
+
+	"github.com/aws/amazon-ecs-agent/agent/config"
+	"github.com/aws/amazon-ecs-agent/agent/dockerclient/dockerapi"
+	"github.com/docker/docker/api/types"
+)
+
+// Loader defines an interface for loading the appnetAgent container image. This is mostly
+// to facilitate mocking and testing of the LoadImage method
+type Loader interface {
+	LoadImage(ctx context.Context, cfg *config.Config, dockerClient dockerapi.DockerClient) (*types.ImageInspect, error)
+	IsLoaded(dockerClient dockerapi.DockerClient) (bool, error)
+}

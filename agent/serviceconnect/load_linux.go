@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/aws/amazon-ecs-agent/agent/config"
 	"github.com/aws/amazon-ecs-agent/agent/dockerclient"
 	"github.com/aws/amazon-ecs-agent/agent/dockerclient/dockerapi"
 	"github.com/aws/amazon-ecs-agent/agent/logger"
@@ -34,7 +35,7 @@ var (
 )
 
 // LoadImage helps load the AppNetAgent container image for the agent
-func (agent *loader) LoadImage(ctx context.Context, dockerClient dockerapi.DockerClient) (*types.ImageInspect, error) {
+func (agent *loader) LoadImage(ctx context.Context, _ *config.Config, dockerClient dockerapi.DockerClient) (*types.ImageInspect, error) {
 	logger.Debug("Loading appnet agent container tarball:", logger.Fields{
 		field.Image: agent.AgentContainerTarballPath,
 	})
