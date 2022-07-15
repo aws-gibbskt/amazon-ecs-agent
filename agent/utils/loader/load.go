@@ -25,5 +25,4 @@ import (
 type Loader interface {
 	LoadImage(ctx context.Context, dockerClient dockerapi.DockerClient) (*types.ImageInspect, error)
 	IsLoaded(dockerClient dockerapi.DockerClient) (bool, error)
-	GetLoadedImageName() (string, error)
 }

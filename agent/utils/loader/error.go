@@ -13,9 +13,6 @@
 
 package loader
 
-// https://golang.org/src/syscall/zerrors_linux_386.go#L1382
-const noSuchFile = "no such file or directory"
-
 // UnsupportedPlatformError indicates an error when loading appnet container
 // image on an unsupported OS platform
 type UnsupportedPlatformError struct {
