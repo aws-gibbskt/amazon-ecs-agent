@@ -343,7 +343,7 @@ func (agent *ecsAgent) doStart(containerChangeEventStream *eventstream.EventStre
 	if agent.cfg.TaskENIEnabled.Enabled() {
 		// check pause container image load
 		if loadPauseErr != nil {
-			if pause.IsNoSuchFileError(loadPauseErr) || pause.UnsupportedPlatform(loadPauseErr) {
+			if loader.IsNoSuchFileError(loadPauseErr) || loader.IsUnsupportedPlatform(loadPauseErr) {
 				return exitcodes.ExitTerminal
 			} else {
 				return exitcodes.ExitError
