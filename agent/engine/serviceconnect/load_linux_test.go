@@ -1,5 +1,5 @@
-//go:build unit
-// +build unit
+//go:build linux && unit
+// +build linux,unit
 
 // Copyright Amazon.com Inc. or its affiliates. All Rights Reserved.
 //
@@ -19,9 +19,10 @@ package serviceconnect
 import (
 	"context"
 	"errors"
+	"github.com/aws/amazon-ecs-agent/agent/config"
+	"os"
 	"testing"
 
-	"github.com/aws/amazon-ecs-agent/agent/config"
 	"github.com/aws/amazon-ecs-agent/agent/dockerclient/dockerapi"
 	mock_sdkclient "github.com/aws/amazon-ecs-agent/agent/dockerclient/sdkclient/mocks"
 	mock_sdkclientfactory "github.com/aws/amazon-ecs-agent/agent/dockerclient/sdkclientfactory/mocks"
@@ -32,12 +33,99 @@ import (
 )
 
 const (
-	agentImageName = "appnet-agent:testtag"
-	agentName      = "appnet-agent"
-	agentTag       = "testtag"
+	agentImageName       = "appnet-agent:testtag"
+	agentName            = "appnet-agent"
+	agentTag             = "testtag"
+	containerTarballPath = "/path/to/container.tar"
 )
 
 var defaultConfig = config.DefaultConfig()
+
+func mockOpen() func() {
+	open = func(name string) (*os.File, error) {
+		return nil, nil
+	}
+	return func() {
+		open = os.Open
+	}
+}
+
+// TestLoadFromFileWithReaderError tests loadFromFile with reader error
+func TestLoadFromFileWithReaderError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	// Docker SDK tests
+	mockDockerSDK := mock_sdkclient.NewMockClient(ctrl)
+	mockDockerSDK.EXPECT().Ping(gomock.Any()).Return(types.Ping{}, nil)
+	sdkFactory := mock_sdkclientfactory.NewMockFactory(ctrl)
+	sdkFactory.EXPECT().GetDefaultClient().AnyTimes().Return(mockDockerSDK, nil)
+
+	ctx, cancel := context.WithCancel(context.TODO())
+	defer cancel()
+
+	client, err := dockerapi.NewDockerGoClient(sdkFactory, &defaultConfig, ctx)
+	assert.NoError(t, err)
+
+	open = func(name string) (*os.File, error) {
+		return nil, errors.New("Dummy Reader Error")
+	}
+	defer func() {
+		open = os.Open
+	}()
+
+	err = loadFromFile(ctx, containerTarballPath, client)
+	assert.Error(t, err)
+}
+
+// TestLoadFromFileHappyPath tests loadFromFile against happy path
+func TestLoadFromFileHappyPath(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	// Docker SDK tests
+	mockDockerSDK := mock_sdkclient.NewMockClient(ctrl)
+	mockDockerSDK.EXPECT().Ping(gomock.Any()).Return(types.Ping{}, nil)
+	sdkFactory := mock_sdkclientfactory.NewMockFactory(ctrl)
+	sdkFactory.EXPECT().GetDefaultClient().AnyTimes().Return(mockDockerSDK, nil)
+
+	ctx, cancel := context.WithCancel(context.TODO())
+	defer cancel()
+
+	client, err := dockerapi.NewDockerGoClient(sdkFactory, &defaultConfig, ctx)
+	assert.NoError(t, err)
+	mockDockerSDK.EXPECT().ImageLoad(gomock.Any(), gomock.Any(), false).Return(types.ImageLoadResponse{}, nil)
+	defer mockOpen()()
+
+	err = loadFromFile(ctx, containerTarballPath, client)
+	assert.NoError(t, err)
+}
+
+// TestLoadFromFileDockerLoadImageError tests loadFromFile against error
+// from Docker clients LoadImage
+func TestLoadFromFileDockerLoadImageError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	// Docker SDK tests
+	mockDockerSDK := mock_sdkclient.NewMockClient(ctrl)
+	mockDockerSDK.EXPECT().Ping(gomock.Any()).Return(types.Ping{}, nil)
+	sdkFactory := mock_sdkclientfactory.NewMockFactory(ctrl)
+	sdkFactory.EXPECT().GetDefaultClient().AnyTimes().Return(mockDockerSDK, nil)
+
+	ctx, cancel := context.WithCancel(context.TODO())
+	defer cancel()
+
+	client, err := dockerapi.NewDockerGoClient(sdkFactory, &defaultConfig, ctx)
+	assert.NoError(t, err)
+	mockDockerSDK.EXPECT().ImageLoad(gomock.Any(), gomock.Any(), false).Return(types.ImageLoadResponse{},
+		errors.New("Dummy Load Image Error"))
+
+	defer mockOpen()()
+
+	err = loadFromFile(ctx, containerTarballPath, client)
+	assert.Error(t, err)
+}
 
 func TestGetAppnetAgentContainerImageInspectImageError(t *testing.T) {
 	ctrl := gomock.NewController(t)
@@ -99,7 +187,7 @@ func TestIsImageLoadedHappyPath(t *testing.T) {
 	assert.NoError(t, err)
 	mockDockerSDK.EXPECT().ImageInspectWithRaw(gomock.Any(), gomock.Any()).Return(types.ImageInspect{ID: "test123"}, nil, nil)
 
-	isLoaded, err := (&loader{
+	isLoaded, err := (&manager{
 		AgentContainerImageName: agentName,
 		AgentContainerTag:       agentTag,
 	}).isImageLoaded(client)
@@ -124,7 +212,7 @@ func TestIsImageLoadedNotLoaded(t *testing.T) {
 	assert.NoError(t, err)
 	mockDockerSDK.EXPECT().ImageInspectWithRaw(gomock.Any(), gomock.Any()).Return(types.ImageInspect{}, nil, nil)
 
-	isLoaded, err := (&loader{
+	isLoaded, err := (&manager{
 		AgentContainerImageName: agentName,
 		AgentContainerTag:       agentTag,
 	}).isImageLoaded(client)
@@ -150,7 +238,7 @@ func TestIsImageLoadedError(t *testing.T) {
 	mockDockerSDK.EXPECT().ImageInspectWithRaw(gomock.Any(), gomock.Any()).Return(
 		types.ImageInspect{}, nil, errors.New("error"))
 
-	isLoaded, err := (&loader{
+	isLoaded, err := (&manager{
 		AgentContainerImageName: agentName,
 		AgentContainerTag:       agentTag,
 	}).isImageLoaded(client)

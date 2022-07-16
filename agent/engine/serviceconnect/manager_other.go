@@ -29,16 +29,34 @@ import (
 type manager struct {
 }
 
-func NewManager() Manager {
+func NewManager(serviceConnectLoader serviceconnect.Loader) Manager {
 	return &manager{}
 }
 
-func (m *manager) AugmentTaskContainer(*apitask.Task, *apicontainer.Container, *dockercontainer.HostConfig, serviceconnect.Loader) error {
+func (m *manager) AugmentTaskContainer(*apitask.Task, *apicontainer.Container, *dockercontainer.HostConfig) error {
 	return fmt.Errorf("ServiceConnect is only supported on linux")
 }
-func (m *manager) CreateInstanceTask(config *config.Config, appnetAgentLoader serviceconnect.Loader) (*apitask.Task, error) {
+func (m *manager) CreateInstanceTask(config *config.Config) (*apitask.Task, error) {
 	return nil, fmt.Errorf("ServiceConnect is only supported on linux")
 }
 func (m *manager) AugmentInstanceContainer(*apitask.Task, *apicontainer.Container, *dockercontainer.HostConfig) error {
 	return fmt.Errorf("ServiceConnect is only supported on linux")
+}
+
+func (*manager) LoadImage(ctx context.Context, _ *config.Config, dockerClient dockerapi.DockerClient) (*types.ImageInspect, error) {
+	return nil, NewUnsupportedPlatformError(fmt.Errorf(
+		"appnetAgent container load: unsupported platform: %s/%s",
+		runtime.GOOS, runtime.GOARCH))
+}
+
+func (*manager) IsLoaded(dockerClient dockerapi.DockerClient) (bool, error) {
+	return false, NewUnsupportedPlatformError(fmt.Errorf(
+		"appnetAgent container isloaded: unsupported platform: %s/%s",
+		runtime.GOOS, runtime.GOARCH))
+}
+
+func (*manager) GetLoadedImageName() (string, error) {
+	return "", NewUnsupportedPlatformError(fmt.Errorf(
+		"appnetAgent container get image name: unsupported platform: %s/%s",
+		runtime.GOOS, runtime.GOARCH))
 }

@@ -14,6 +14,7 @@
 package serviceconnect
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -22,17 +23,19 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 
-	apitaskstatus "github.com/aws/amazon-ecs-agent/agent/api/task/status"
-
-	apicontainerstatus "github.com/aws/amazon-ecs-agent/agent/api/container/status"
-
-	"github.com/aws/amazon-ecs-agent/agent/taskresource"
-
 	apicontainer "github.com/aws/amazon-ecs-agent/agent/api/container"
+	apicontainerstatus "github.com/aws/amazon-ecs-agent/agent/api/container/status"
 	apiserviceconnect "github.com/aws/amazon-ecs-agent/agent/api/serviceconnect"
 	apitask "github.com/aws/amazon-ecs-agent/agent/api/task"
+	apitaskstatus "github.com/aws/amazon-ecs-agent/agent/api/task/status"
 	"github.com/aws/amazon-ecs-agent/agent/config"
-	"github.com/aws/amazon-ecs-agent/agent/serviceconnect"
+	"github.com/aws/amazon-ecs-agent/agent/dockerclient"
+	"github.com/aws/amazon-ecs-agent/agent/dockerclient/dockerapi"
+	"github.com/aws/amazon-ecs-agent/agent/logger"
+	"github.com/aws/amazon-ecs-agent/agent/logger/field"
+	"github.com/aws/amazon-ecs-agent/agent/taskresource"
+	"github.com/aws/amazon-ecs-agent/agent/utils/loader"
+	"github.com/docker/docker/api/types"
 	dockercontainer "github.com/docker/docker/api/types/container"
 )
 
@@ -60,6 +63,10 @@ const (
 	httpRequestPrefix        = "http://localhost"
 	defaultAdminStatsRequest = httpRequestPrefix + "/stats/prometheus?usedonly&filter=metrics_extension&delta"
 	defaultAdminDrainRequest = httpRequestPrefix + "/drain_listeners?inboundonly"
+
+	defaultAgentContainerTarballPath = "/managed-agents/serviceconnect/appnet_agent.interface-v1.tar"
+	defaultAgentContainerImageName   = "appnet_agent"
+	defaultAgentContainerTag         = "service_connect.v1"
 )
 
 type manager struct {
@@ -84,6 +91,10 @@ type manager struct {
 	adminStatsRequest string
 	// Http path + params to make a drain request of AppNetAgent
 	adminDrainRequest string
+
+	AgentContainerImageName   string
+	AgentContainerTag         string
+	AgentContainerTarballPath string
 }
 
 func NewManager() Manager {
@@ -98,10 +109,14 @@ func NewManager() Manager {
 		statusENV:           defaultStatusENV,
 		adminStatsRequest:   defaultAdminStatsRequest,
 		adminDrainRequest:   defaultAdminDrainRequest,
+
+		AgentContainerImageName:   defaultAgentContainerImageName,
+		AgentContainerTag:         defaultAgentContainerTag,
+		AgentContainerTarballPath: defaultAgentContainerTarballPath,
 	}
 }
 
-func (m *manager) augmentAgentContainer(task *apitask.Task, container *apicontainer.Container, hostConfig *dockercontainer.HostConfig, serviceConnectoader serviceconnect.Loader) error {
+func (m *manager) augmentAgentContainer(task *apitask.Task, container *apicontainer.Container, hostConfig *dockercontainer.HostConfig) error {
 	if task.IsNetworkModeBridge() {
 		err := m.initServiceConnectContainerMapping(task, container, hostConfig)
 		if err != nil {
@@ -121,7 +136,7 @@ func (m *manager) augmentAgentContainer(task *apitask.Task, container *apicontai
 	config.DrainRequest = m.adminDrainRequest
 
 	task.PopulateServiceConnectRuntimeConfig(config)
-	container.Image, _ = serviceConnectoader.GetLoadedImageName()
+	container.Image, _ = m.GetLoadedImageName()
 	return nil
 }
 
@@ -206,7 +221,7 @@ func DNSConfigToDockerExtraHostsFormat(dnsConfigs []apiserviceconnect.DNSConfigE
 	return hosts
 }
 
-func (m *manager) AugmentTaskContainer(task *apitask.Task, container *apicontainer.Container, hostConfig *dockercontainer.HostConfig, serviceConnectLoader serviceconnect.Loader) error {
+func (m *manager) AugmentTaskContainer(task *apitask.Task, container *apicontainer.Container, hostConfig *dockercontainer.HostConfig) error {
 	var err error
 	// Add SC VIPs to pause container's known hosts
 	if container.Type == apicontainer.ContainerCNIPause {
@@ -214,13 +229,13 @@ func (m *manager) AugmentTaskContainer(task *apitask.Task, container *apicontain
 			DNSConfigToDockerExtraHostsFormat(task.ServiceConnectConfig.DNSConfig)...)
 	}
 	if container == task.GetServiceConnectContainer() {
-		m.augmentAgentContainer(task, container, hostConfig, serviceConnectLoader)
+		m.augmentAgentContainer(task, container, hostConfig)
 	}
 	return err
 }
 
-func (m *manager) CreateInstanceTask(cfg *config.Config, serviceConnectLoader serviceconnect.Loader) (*apitask.Task, error) {
-	imageName, err := serviceConnectLoader.GetLoadedImageName()
+func (m *manager) CreateInstanceTask(cfg *config.Config) (*apitask.Task, error) {
+	imageName, err := m.GetLoadedImageName()
 	if err != nil {
 		return nil, err
 	}
@@ -266,4 +281,77 @@ func (m *manager) AugmentInstanceContainer(task *apitask.Task, container *apicon
 
 	task.PopulateServiceConnectRuntimeConfig(config)
 	return nil
+}
+
+// LoadImage helps load the AppNetAgent container image for the agent
+func (agent *manager) LoadImage(ctx context.Context, _ *config.Config, dockerClient dockerapi.DockerClient) (*types.ImageInspect, error) {
+	logger.Debug("Loading appnet agent container tarball:", logger.Fields{
+		field.Image: agent.AgentContainerTarballPath,
+	})
+	if err := loadFromFile(ctx, agent.AgentContainerTarballPath, dockerClient); err != nil {
+		return nil, err
+	}
+
+	imageName, _ := agent.GetLoadedImageName()
+	return getAgentContainerImage(imageName, dockerClient)
+}
+
+func (agent *manager) IsLoaded(dockerClient dockerapi.DockerClient) (bool, error) {
+	return agent.isImageLoaded(dockerClient)
+}
+
+func (agent *manager) GetLoadedImageName() (string, error) {
+	return fmt.Sprintf("%s:%s", agent.AgentContainerImageName, agent.AgentContainerTag), nil
+}
+
+var open = os.Open
+
+// https://golang.org/src/syscall/zerrors_linux_386.go#L1382
+const noSuchFile = "no such file or directory"
+
+func loadFromFile(ctx context.Context, path string, dockerClient dockerapi.DockerClient) error {
+	containerReader, err := open(path)
+	if err != nil {
+		if err.Error() == noSuchFile {
+			return loader.NewNoSuchFileError(fmt.Errorf(
+				"appnet agent container load: failed to read container image: %s : %w", path, err))
+		}
+		return fmt.Errorf("appnet agent container load: failed to read container image: %s : %w", path, err)
+	}
+	if err := dockerClient.LoadImage(ctx, containerReader, dockerclient.LoadImageTimeout); err != nil {
+		return fmt.Errorf("appnet agent container load: failed to load container image: %s : %w", path, err)
+	}
+
+	return nil
+
+}
+
+// This function uses the DockerClient to inspect the image with the given name and tag.
+func getAgentContainerImage(imageName string, dockerClient dockerapi.DockerClient) (*types.ImageInspect, error) {
+	logger.Debug("Inspecting appnet agent container image:", logger.Fields{
+		field.Image: imageName,
+	})
+
+	image, err := dockerClient.InspectImage(imageName)
+	if err != nil {
+		return nil, fmt.Errorf("appnet agent container load: failed to inspect image: %s; %w", imageName, err)
+	}
+
+	return image, nil
+}
+
+// Common function for linux and windows to check if the container appnet Agent image has been loaded
+func (agent *manager) isImageLoaded(dockerClient dockerapi.DockerClient) (bool, error) {
+	imageName, _ := agent.GetLoadedImageName()
+	image, err := getAgentContainerImage(imageName, dockerClient)
+
+	if err != nil {
+		return false, err
+	}
+
+	if image == nil || image.ID == "" {
+		return false, nil
+	}
+
+	return true, nil
 }

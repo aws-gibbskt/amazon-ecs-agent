@@ -19,12 +19,14 @@
 package mock_serviceconnect
 
 import (
+	context "context"
 	reflect "reflect"
 
 	container "github.com/aws/amazon-ecs-agent/agent/api/container"
 	task "github.com/aws/amazon-ecs-agent/agent/api/task"
 	config "github.com/aws/amazon-ecs-agent/agent/config"
-	serviceconnect "github.com/aws/amazon-ecs-agent/agent/serviceconnect"
+	dockerapi "github.com/aws/amazon-ecs-agent/agent/dockerclient/dockerapi"
+	types "github.com/docker/docker/api/types"
 	container0 "github.com/docker/docker/api/types/container"
 	gomock "github.com/golang/mock/gomock"
 )
@@ -67,30 +69,75 @@ func (mr *MockManagerMockRecorder) AugmentInstanceContainer(arg0, arg1, arg2 int
 }
 
 // AugmentTaskContainer mocks base method
-func (m *MockManager) AugmentTaskContainer(arg0 *task.Task, arg1 *container.Container, arg2 *container0.HostConfig, arg3 serviceconnect.Loader) error {
+func (m *MockManager) AugmentTaskContainer(arg0 *task.Task, arg1 *container.Container, arg2 *container0.HostConfig) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AugmentTaskContainer", arg0, arg1, arg2, arg3)
+	ret := m.ctrl.Call(m, "AugmentTaskContainer", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // AugmentTaskContainer indicates an expected call of AugmentTaskContainer
-func (mr *MockManagerMockRecorder) AugmentTaskContainer(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+func (mr *MockManagerMockRecorder) AugmentTaskContainer(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AugmentTaskContainer", reflect.TypeOf((*MockManager)(nil).AugmentTaskContainer), arg0, arg1, arg2, arg3)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AugmentTaskContainer", reflect.TypeOf((*MockManager)(nil).AugmentTaskContainer), arg0, arg1, arg2)
 }
 
 // CreateInstanceTask mocks base method
-func (m *MockManager) CreateInstanceTask(arg0 *config.Config, arg1 serviceconnect.Loader) (*task.Task, error) {
+func (m *MockManager) CreateInstanceTask(arg0 *config.Config) (*task.Task, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateInstanceTask", arg0, arg1)
+	ret := m.ctrl.Call(m, "CreateInstanceTask", arg0)
 	ret0, _ := ret[0].(*task.Task)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CreateInstanceTask indicates an expected call of CreateInstanceTask
-func (mr *MockManagerMockRecorder) CreateInstanceTask(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockManagerMockRecorder) CreateInstanceTask(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateInstanceTask", reflect.TypeOf((*MockManager)(nil).CreateInstanceTask), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateInstanceTask", reflect.TypeOf((*MockManager)(nil).CreateInstanceTask), arg0)
+}
+
+// GetLoadedImageName mocks base method
+func (m *MockManager) GetLoadedImageName() (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetLoadedImageName")
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetLoadedImageName indicates an expected call of GetLoadedImageName
+func (mr *MockManagerMockRecorder) GetLoadedImageName() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLoadedImageName", reflect.TypeOf((*MockManager)(nil).GetLoadedImageName))
+}
+
+// IsLoaded mocks base method
+func (m *MockManager) IsLoaded(arg0 dockerapi.DockerClient) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsLoaded", arg0)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// IsLoaded indicates an expected call of IsLoaded
+func (mr *MockManagerMockRecorder) IsLoaded(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsLoaded", reflect.TypeOf((*MockManager)(nil).IsLoaded), arg0)
+}
+
+// LoadImage mocks base method
+func (m *MockManager) LoadImage(arg0 context.Context, arg1 *config.Config, arg2 dockerapi.DockerClient) (*types.ImageInspect, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "LoadImage", arg0, arg1, arg2)
+	ret0, _ := ret[0].(*types.ImageInspect)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// LoadImage indicates an expected call of LoadImage
+func (mr *MockManagerMockRecorder) LoadImage(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LoadImage", reflect.TypeOf((*MockManager)(nil).LoadImage), arg0, arg1, arg2)
 }

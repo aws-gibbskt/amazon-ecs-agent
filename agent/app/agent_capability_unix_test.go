@@ -23,8 +23,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	mock_pause "github.com/aws/amazon-ecs-agent/agent/eni/pause/mocks"
-
 	app_mocks "github.com/aws/amazon-ecs-agent/agent/app/mocks"
 	"github.com/aws/amazon-ecs-agent/agent/config"
 	"github.com/aws/amazon-ecs-agent/agent/dockerclient"
@@ -32,10 +30,11 @@ import (
 	"github.com/aws/amazon-ecs-agent/agent/ecs_client/model/ecs"
 	"github.com/aws/amazon-ecs-agent/agent/ecscni"
 	mock_ecscni "github.com/aws/amazon-ecs-agent/agent/ecscni/mocks"
+	mock_serviceconnect "github.com/aws/amazon-ecs-agent/agent/engine/serviceconnect/mock"
 	"github.com/aws/amazon-ecs-agent/agent/gpu"
-	mock_serviceconnect "github.com/aws/amazon-ecs-agent/agent/serviceconnect/mocks"
 	"github.com/aws/amazon-ecs-agent/agent/taskresource"
 	"github.com/aws/amazon-ecs-agent/agent/utils"
+	mock_loader "github.com/aws/amazon-ecs-agent/agent/utils/loader/mocks"
 	mock_mobypkgwrapper "github.com/aws/amazon-ecs-agent/agent/utils/mobypkgwrapper/mocks"
 	"github.com/aws/aws-sdk-go/aws"
 	aws_credentials "github.com/aws/aws-sdk-go/aws/credentials"
@@ -55,7 +54,7 @@ func TestVolumeDriverCapabilitiesUnix(t *testing.T) {
 	cniClient := mock_ecscni.NewMockCNIClient(ctrl)
 	mockCredentialsProvider := app_mocks.NewMockProvider(ctrl)
 	mockMobyPlugins := mock_mobypkgwrapper.NewMockPlugins(ctrl)
-	mockPauseLoader := mock_pause.NewMockLoader(ctrl)
+	mockPauseLoader := mock_loader.NewMockLoader(ctrl)
 	conf := &config.Config{
 		AvailableLoggingDrivers: []dockerclient.LoggingDriver{
 			dockerclient.JSONFileDriver,
@@ -73,7 +72,7 @@ func TestVolumeDriverCapabilitiesUnix(t *testing.T) {
 	}
 
 	mockPauseLoader.EXPECT().IsLoaded(gomock.Any()).Return(true, nil)
-	mockServiceConnectLoader := mock_serviceconnect.NewMockLoader(ctrl)
+	mockServiceConnectLoader := mock_serviceconnect.NewMockManager(ctrl)
 	mockServiceConnectLoader.EXPECT().IsLoaded(gomock.Any()).Return(true, nil).AnyTimes()
 	gomock.InOrder(
 		client.EXPECT().SupportedVersions().Return([]dockerclient.DockerVersion{
@@ -126,14 +125,14 @@ func TestVolumeDriverCapabilitiesUnix(t *testing.T) {
 	// Cancel the context to cancel async routines
 	defer cancel()
 	agent := &ecsAgent{
-		ctx:                  ctx,
-		cfg:                  conf,
-		dockerClient:         client,
-		cniClient:            cniClient,
-		pauseLoader:          mockPauseLoader,
-		credentialProvider:   aws_credentials.NewCredentials(mockCredentialsProvider),
-		mobyPlugins:          mockMobyPlugins,
-		serviceconnectLoader: mockServiceConnectLoader,
+		ctx:                   ctx,
+		cfg:                   conf,
+		dockerClient:          client,
+		cniClient:             cniClient,
+		pauseLoader:           mockPauseLoader,
+		credentialProvider:    aws_credentials.NewCredentials(mockCredentialsProvider),
+		mobyPlugins:           mockMobyPlugins,
+		serviceconnectManager: mockServiceConnectLoader,
 	}
 	capabilities, err := agent.capabilities()
 	assert.NoError(t, err)
@@ -153,14 +152,14 @@ func TestNvidiaDriverCapabilitiesUnix(t *testing.T) {
 	client := mock_dockerapi.NewMockDockerClient(ctrl)
 	mockMobyPlugins := mock_mobypkgwrapper.NewMockPlugins(ctrl)
 	mockCredentialsProvider := app_mocks.NewMockProvider(ctrl)
-	mockPauseLoader := mock_pause.NewMockLoader(ctrl)
+	mockPauseLoader := mock_loader.NewMockLoader(ctrl)
 	conf := &config.Config{
 		PrivilegedDisabled: config.BooleanDefaultFalse{Value: config.ExplicitlyEnabled},
 		GPUSupportEnabled:  true,
 	}
 
 	mockPauseLoader.EXPECT().IsLoaded(gomock.Any()).Return(true, nil)
-	mockServiceConnectLoader := mock_serviceconnect.NewMockLoader(ctrl)
+	mockServiceConnectLoader := mock_serviceconnect.NewMockManager(ctrl)
 	mockServiceConnectLoader.EXPECT().IsLoaded(gomock.Any()).Return(true, nil).AnyTimes()
 	gomock.InOrder(
 		client.EXPECT().SupportedVersions().Return([]dockerclient.DockerVersion{
@@ -205,7 +204,7 @@ func TestNvidiaDriverCapabilitiesUnix(t *testing.T) {
 				DriverVersion: "396.44",
 			},
 		},
-		serviceconnectLoader: mockServiceConnectLoader,
+		serviceconnectManager: mockServiceConnectLoader,
 	}
 	capabilities, err := agent.capabilities()
 	assert.NoError(t, err)
@@ -225,14 +224,14 @@ func TestEmptyNvidiaDriverCapabilitiesUnix(t *testing.T) {
 	client := mock_dockerapi.NewMockDockerClient(ctrl)
 	mockMobyPlugins := mock_mobypkgwrapper.NewMockPlugins(ctrl)
 	mockCredentialsProvider := app_mocks.NewMockProvider(ctrl)
-	mockPauseLoader := mock_pause.NewMockLoader(ctrl)
+	mockPauseLoader := mock_loader.NewMockLoader(ctrl)
 	conf := &config.Config{
 		PrivilegedDisabled: config.BooleanDefaultFalse{Value: config.ExplicitlyEnabled},
 		GPUSupportEnabled:  true,
 	}
 
 	mockPauseLoader.EXPECT().IsLoaded(gomock.Any()).Return(true, nil)
-	mockServiceConnectLoader := mock_serviceconnect.NewMockLoader(ctrl)
+	mockServiceConnectLoader := mock_serviceconnect.NewMockManager(ctrl)
 	mockServiceConnectLoader.EXPECT().IsLoaded(gomock.Any()).Return(true, nil).AnyTimes()
 	gomock.InOrder(
 		client.EXPECT().SupportedVersions().Return([]dockerclient.DockerVersion{
@@ -275,7 +274,7 @@ func TestEmptyNvidiaDriverCapabilitiesUnix(t *testing.T) {
 				DriverVersion: "",
 			},
 		},
-		serviceconnectLoader: mockServiceConnectLoader,
+		serviceconnectManager: mockServiceConnectLoader,
 	}
 	capabilities, err := agent.capabilities()
 	assert.NoError(t, err)
@@ -296,7 +295,7 @@ func TestENITrunkingCapabilitiesUnix(t *testing.T) {
 	cniClient := mock_ecscni.NewMockCNIClient(ctrl)
 	mockMobyPlugins := mock_mobypkgwrapper.NewMockPlugins(ctrl)
 	mockCredentialsProvider := app_mocks.NewMockProvider(ctrl)
-	mockPauseLoader := mock_pause.NewMockLoader(ctrl)
+	mockPauseLoader := mock_loader.NewMockLoader(ctrl)
 	conf := &config.Config{
 		PrivilegedDisabled: config.BooleanDefaultFalse{Value: config.ExplicitlyEnabled},
 		TaskENIEnabled:     config.BooleanDefaultFalse{Value: config.ExplicitlyEnabled},
@@ -304,7 +303,7 @@ func TestENITrunkingCapabilitiesUnix(t *testing.T) {
 	}
 
 	mockPauseLoader.EXPECT().IsLoaded(gomock.Any()).Return(true, nil)
-	mockServiceConnectLoader := mock_serviceconnect.NewMockLoader(ctrl)
+	mockServiceConnectLoader := mock_serviceconnect.NewMockManager(ctrl)
 	mockServiceConnectLoader.EXPECT().IsLoaded(gomock.Any()).Return(true, nil).AnyTimes()
 	gomock.InOrder(
 		client.EXPECT().SupportedVersions().Return([]dockerclient.DockerVersion{
@@ -354,14 +353,14 @@ func TestENITrunkingCapabilitiesUnix(t *testing.T) {
 	// Cancel the context to cancel async routines
 	defer cancel()
 	agent := &ecsAgent{
-		ctx:                  ctx,
-		cfg:                  conf,
-		dockerClient:         client,
-		cniClient:            cniClient,
-		pauseLoader:          mockPauseLoader,
-		credentialProvider:   aws_credentials.NewCredentials(mockCredentialsProvider),
-		mobyPlugins:          mockMobyPlugins,
-		serviceconnectLoader: mockServiceConnectLoader,
+		ctx:                   ctx,
+		cfg:                   conf,
+		dockerClient:          client,
+		cniClient:             cniClient,
+		pauseLoader:           mockPauseLoader,
+		credentialProvider:    aws_credentials.NewCredentials(mockCredentialsProvider),
+		mobyPlugins:           mockMobyPlugins,
+		serviceconnectManager: mockServiceConnectLoader,
 	}
 	capabilities, err := agent.capabilities()
 	assert.NoError(t, err)
@@ -383,7 +382,7 @@ func TestNoENITrunkingCapabilitiesUnix(t *testing.T) {
 	cniClient := mock_ecscni.NewMockCNIClient(ctrl)
 	mockMobyPlugins := mock_mobypkgwrapper.NewMockPlugins(ctrl)
 	mockCredentialsProvider := app_mocks.NewMockProvider(ctrl)
-	mockPauseLoader := mock_pause.NewMockLoader(ctrl)
+	mockPauseLoader := mock_loader.NewMockLoader(ctrl)
 	conf := &config.Config{
 		PrivilegedDisabled: config.BooleanDefaultFalse{Value: config.ExplicitlyEnabled},
 		TaskENIEnabled:     config.BooleanDefaultFalse{Value: config.ExplicitlyEnabled},
@@ -391,7 +390,7 @@ func TestNoENITrunkingCapabilitiesUnix(t *testing.T) {
 	}
 
 	mockPauseLoader.EXPECT().IsLoaded(gomock.Any()).Return(true, nil)
-	mockServiceConnectLoader := mock_serviceconnect.NewMockLoader(ctrl)
+	mockServiceConnectLoader := mock_serviceconnect.NewMockManager(ctrl)
 	mockServiceConnectLoader.EXPECT().IsLoaded(gomock.Any()).Return(true, nil).AnyTimes()
 	gomock.InOrder(
 		client.EXPECT().SupportedVersions().Return([]dockerclient.DockerVersion{
@@ -433,14 +432,14 @@ func TestNoENITrunkingCapabilitiesUnix(t *testing.T) {
 	// Cancel the context to cancel async routines
 	defer cancel()
 	agent := &ecsAgent{
-		ctx:                  ctx,
-		cfg:                  conf,
-		dockerClient:         client,
-		cniClient:            cniClient,
-		pauseLoader:          mockPauseLoader,
-		credentialProvider:   aws_credentials.NewCredentials(mockCredentialsProvider),
-		mobyPlugins:          mockMobyPlugins,
-		serviceconnectLoader: mockServiceConnectLoader,
+		ctx:                   ctx,
+		cfg:                   conf,
+		dockerClient:          client,
+		cniClient:             cniClient,
+		pauseLoader:           mockPauseLoader,
+		credentialProvider:    aws_credentials.NewCredentials(mockCredentialsProvider),
+		mobyPlugins:           mockMobyPlugins,
+		serviceconnectManager: mockServiceConnectLoader,
 	}
 	capabilities, err := agent.capabilities()
 	assert.NoError(t, err)
@@ -460,13 +459,13 @@ func TestPIDAndIPCNamespaceSharingCapabilitiesUnix(t *testing.T) {
 	client := mock_dockerapi.NewMockDockerClient(ctrl)
 	mockMobyPlugins := mock_mobypkgwrapper.NewMockPlugins(ctrl)
 	mockCredentialsProvider := app_mocks.NewMockProvider(ctrl)
-	mockPauseLoader := mock_pause.NewMockLoader(ctrl)
+	mockPauseLoader := mock_loader.NewMockLoader(ctrl)
 	conf := &config.Config{
 		PrivilegedDisabled: config.BooleanDefaultFalse{Value: config.ExplicitlyEnabled},
 	}
 
 	mockPauseLoader.EXPECT().IsLoaded(gomock.Any()).Return(true, nil)
-	mockServiceConnectLoader := mock_serviceconnect.NewMockLoader(ctrl)
+	mockServiceConnectLoader := mock_serviceconnect.NewMockManager(ctrl)
 	mockServiceConnectLoader.EXPECT().IsLoaded(gomock.Any()).Return(true, nil).AnyTimes()
 	gomock.InOrder(
 		client.EXPECT().SupportedVersions().Return([]dockerclient.DockerVersion{
@@ -504,13 +503,13 @@ func TestPIDAndIPCNamespaceSharingCapabilitiesUnix(t *testing.T) {
 	// Cancel the context to cancel async routines
 	defer cancel()
 	agent := &ecsAgent{
-		ctx:                  ctx,
-		cfg:                  conf,
-		dockerClient:         client,
-		pauseLoader:          mockPauseLoader,
-		credentialProvider:   aws_credentials.NewCredentials(mockCredentialsProvider),
-		mobyPlugins:          mockMobyPlugins,
-		serviceconnectLoader: mockServiceConnectLoader,
+		ctx:                   ctx,
+		cfg:                   conf,
+		dockerClient:          client,
+		pauseLoader:           mockPauseLoader,
+		credentialProvider:    aws_credentials.NewCredentials(mockCredentialsProvider),
+		mobyPlugins:           mockMobyPlugins,
+		serviceconnectManager: mockServiceConnectLoader,
 	}
 	capabilities, err := agent.capabilities()
 	assert.NoError(t, err)
@@ -530,13 +529,13 @@ func TestPIDAndIPCNamespaceSharingCapabilitiesNoPauseContainer(t *testing.T) {
 	client := mock_dockerapi.NewMockDockerClient(ctrl)
 	mockMobyPlugins := mock_mobypkgwrapper.NewMockPlugins(ctrl)
 	mockCredentialsProvider := app_mocks.NewMockProvider(ctrl)
-	mockPauseLoader := mock_pause.NewMockLoader(ctrl)
+	mockPauseLoader := mock_loader.NewMockLoader(ctrl)
 	conf := &config.Config{
 		PrivilegedDisabled: config.BooleanDefaultFalse{Value: config.ExplicitlyEnabled},
 	}
 
 	mockPauseLoader.EXPECT().IsLoaded(gomock.Any()).Return(false, errors.New("mock error"))
-	mockServiceConnectLoader := mock_serviceconnect.NewMockLoader(ctrl)
+	mockServiceConnectLoader := mock_serviceconnect.NewMockManager(ctrl)
 	mockServiceConnectLoader.EXPECT().IsLoaded(gomock.Any()).Return(true, nil).AnyTimes()
 	gomock.InOrder(
 		client.EXPECT().SupportedVersions().Return([]dockerclient.DockerVersion{
@@ -573,13 +572,13 @@ func TestPIDAndIPCNamespaceSharingCapabilitiesNoPauseContainer(t *testing.T) {
 	// Cancel the context to cancel async routines
 	defer cancel()
 	agent := &ecsAgent{
-		ctx:                  ctx,
-		cfg:                  conf,
-		dockerClient:         client,
-		pauseLoader:          mockPauseLoader,
-		credentialProvider:   aws_credentials.NewCredentials(mockCredentialsProvider),
-		mobyPlugins:          mockMobyPlugins,
-		serviceconnectLoader: mockServiceConnectLoader,
+		ctx:                   ctx,
+		cfg:                   conf,
+		dockerClient:          client,
+		pauseLoader:           mockPauseLoader,
+		credentialProvider:    aws_credentials.NewCredentials(mockCredentialsProvider),
+		mobyPlugins:           mockMobyPlugins,
+		serviceconnectManager: mockServiceConnectLoader,
 	}
 	capabilities, err := agent.capabilities()
 	assert.NoError(t, err)
@@ -599,13 +598,13 @@ func TestAppMeshCapabilitiesUnix(t *testing.T) {
 	client := mock_dockerapi.NewMockDockerClient(ctrl)
 	mockMobyPlugins := mock_mobypkgwrapper.NewMockPlugins(ctrl)
 	mockCredentialsProvider := app_mocks.NewMockProvider(ctrl)
-	mockPauseLoader := mock_pause.NewMockLoader(ctrl)
+	mockPauseLoader := mock_loader.NewMockLoader(ctrl)
 	conf := &config.Config{
 		PrivilegedDisabled: config.BooleanDefaultFalse{Value: config.ExplicitlyEnabled},
 	}
 
 	mockPauseLoader.EXPECT().IsLoaded(gomock.Any()).Return(true, nil)
-	mockServiceConnectLoader := mock_serviceconnect.NewMockLoader(ctrl)
+	mockServiceConnectLoader := mock_serviceconnect.NewMockManager(ctrl)
 	mockServiceConnectLoader.EXPECT().IsLoaded(gomock.Any()).Return(true, nil).AnyTimes()
 	gomock.InOrder(
 		client.EXPECT().SupportedVersions().Return([]dockerclient.DockerVersion{
@@ -645,13 +644,13 @@ func TestAppMeshCapabilitiesUnix(t *testing.T) {
 	// Cancel the context to cancel async routines
 	defer cancel()
 	agent := &ecsAgent{
-		ctx:                  ctx,
-		cfg:                  conf,
-		dockerClient:         client,
-		pauseLoader:          mockPauseLoader,
-		credentialProvider:   aws_credentials.NewCredentials(mockCredentialsProvider),
-		mobyPlugins:          mockMobyPlugins,
-		serviceconnectLoader: mockServiceConnectLoader,
+		ctx:                   ctx,
+		cfg:                   conf,
+		dockerClient:          client,
+		pauseLoader:           mockPauseLoader,
+		credentialProvider:    aws_credentials.NewCredentials(mockCredentialsProvider),
+		mobyPlugins:           mockMobyPlugins,
+		serviceconnectManager: mockServiceConnectLoader,
 	}
 	capabilities, err := agent.capabilities()
 	assert.NoError(t, err)
@@ -676,13 +675,13 @@ func TestTaskEIACapabilitiesNoOptimizedCPU(t *testing.T) {
 	client := mock_dockerapi.NewMockDockerClient(ctrl)
 	mockMobyPlugins := mock_mobypkgwrapper.NewMockPlugins(ctrl)
 	mockCredentialsProvider := app_mocks.NewMockProvider(ctrl)
-	mockPauseLoader := mock_pause.NewMockLoader(ctrl)
+	mockPauseLoader := mock_loader.NewMockLoader(ctrl)
 	conf := &config.Config{
 		PrivilegedDisabled: config.BooleanDefaultFalse{Value: config.ExplicitlyEnabled},
 	}
 
 	mockPauseLoader.EXPECT().IsLoaded(gomock.Any()).Return(true, nil)
-	mockServiceConnectLoader := mock_serviceconnect.NewMockLoader(ctrl)
+	mockServiceConnectLoader := mock_serviceconnect.NewMockManager(ctrl)
 	mockServiceConnectLoader.EXPECT().IsLoaded(gomock.Any()).Return(true, nil).AnyTimes()
 	gomock.InOrder(
 		client.EXPECT().SupportedVersions().Return([]dockerclient.DockerVersion{
@@ -700,13 +699,13 @@ func TestTaskEIACapabilitiesNoOptimizedCPU(t *testing.T) {
 	// Cancel the context to cancel async routines
 	defer cancel()
 	agent := &ecsAgent{
-		ctx:                  ctx,
-		cfg:                  conf,
-		dockerClient:         client,
-		pauseLoader:          mockPauseLoader,
-		credentialProvider:   aws_credentials.NewCredentials(mockCredentialsProvider),
-		mobyPlugins:          mockMobyPlugins,
-		serviceconnectLoader: mockServiceConnectLoader,
+		ctx:                   ctx,
+		cfg:                   conf,
+		dockerClient:          client,
+		pauseLoader:           mockPauseLoader,
+		credentialProvider:    aws_credentials.NewCredentials(mockCredentialsProvider),
+		mobyPlugins:           mockMobyPlugins,
+		serviceconnectManager: mockServiceConnectLoader,
 	}
 	capabilities, err := agent.capabilities()
 	assert.NoError(t, err)
@@ -721,7 +720,7 @@ func TestTaskEIACapabilitiesWithOptimizedCPU(t *testing.T) {
 	client := mock_dockerapi.NewMockDockerClient(ctrl)
 	mockMobyPlugins := mock_mobypkgwrapper.NewMockPlugins(ctrl)
 	mockCredentialsProvider := app_mocks.NewMockProvider(ctrl)
-	mockPauseLoader := mock_pause.NewMockLoader(ctrl)
+	mockPauseLoader := mock_loader.NewMockLoader(ctrl)
 
 	conf := &config.Config{
 		PrivilegedDisabled: config.BooleanDefaultFalse{Value: config.ExplicitlyEnabled},
@@ -733,7 +732,7 @@ func TestTaskEIACapabilitiesWithOptimizedCPU(t *testing.T) {
 	defer resetOpenFile()
 
 	mockPauseLoader.EXPECT().IsLoaded(gomock.Any()).Return(true, nil)
-	mockServiceConnectLoader := mock_serviceconnect.NewMockLoader(ctrl)
+	mockServiceConnectLoader := mock_serviceconnect.NewMockManager(ctrl)
 	mockServiceConnectLoader.EXPECT().IsLoaded(gomock.Any()).Return(true, nil).AnyTimes()
 	gomock.InOrder(
 		client.EXPECT().SupportedVersions().Return([]dockerclient.DockerVersion{
@@ -751,13 +750,13 @@ func TestTaskEIACapabilitiesWithOptimizedCPU(t *testing.T) {
 	// Cancel the context to cancel async routines
 	defer cancel()
 	agent := &ecsAgent{
-		ctx:                  ctx,
-		cfg:                  conf,
-		dockerClient:         client,
-		pauseLoader:          mockPauseLoader,
-		credentialProvider:   aws_credentials.NewCredentials(mockCredentialsProvider),
-		mobyPlugins:          mockMobyPlugins,
-		serviceconnectLoader: mockServiceConnectLoader,
+		ctx:                   ctx,
+		cfg:                   conf,
+		dockerClient:          client,
+		pauseLoader:           mockPauseLoader,
+		credentialProvider:    aws_credentials.NewCredentials(mockCredentialsProvider),
+		mobyPlugins:           mockMobyPlugins,
+		serviceconnectManager: mockServiceConnectLoader,
 	}
 	capabilities, err := agent.capabilities()
 	assert.NoError(t, err)
@@ -774,14 +773,14 @@ func TestCapabilitiesUnix(t *testing.T) {
 	client := mock_dockerapi.NewMockDockerClient(ctrl)
 	mockMobyPlugins := mock_mobypkgwrapper.NewMockPlugins(ctrl)
 	mockCredentialsProvider := app_mocks.NewMockProvider(ctrl)
-	mockPauseLoader := mock_pause.NewMockLoader(ctrl)
+	mockPauseLoader := mock_loader.NewMockLoader(ctrl)
 	conf := &config.Config{
 		PrivilegedDisabled:       config.BooleanDefaultFalse{Value: config.ExplicitlyEnabled},
 		VolumePluginCapabilities: []string{capabilityEFSAuth},
 	}
 
 	mockPauseLoader.EXPECT().IsLoaded(gomock.Any()).Return(true, nil)
-	mockServiceConnectLoader := mock_serviceconnect.NewMockLoader(ctrl)
+	mockServiceConnectLoader := mock_serviceconnect.NewMockManager(ctrl)
 	mockServiceConnectLoader.EXPECT().IsLoaded(gomock.Any()).Return(true, nil).AnyTimes()
 	gomock.InOrder(
 		client.EXPECT().SupportedVersions().Return([]dockerclient.DockerVersion{
@@ -826,13 +825,13 @@ func TestCapabilitiesUnix(t *testing.T) {
 	// Cancel the context to cancel async routines
 	defer cancel()
 	agent := &ecsAgent{
-		ctx:                  ctx,
-		cfg:                  conf,
-		dockerClient:         client,
-		pauseLoader:          mockPauseLoader,
-		credentialProvider:   aws_credentials.NewCredentials(mockCredentialsProvider),
-		mobyPlugins:          mockMobyPlugins,
-		serviceconnectLoader: mockServiceConnectLoader,
+		ctx:                   ctx,
+		cfg:                   conf,
+		dockerClient:          client,
+		pauseLoader:           mockPauseLoader,
+		credentialProvider:    aws_credentials.NewCredentials(mockCredentialsProvider),
+		mobyPlugins:           mockMobyPlugins,
+		serviceconnectManager: mockServiceConnectLoader,
 	}
 	capabilities, err := agent.capabilities()
 	assert.NoError(t, err)
@@ -851,13 +850,13 @@ func TestFirelensConfigCapabilitiesUnix(t *testing.T) {
 	client := mock_dockerapi.NewMockDockerClient(ctrl)
 	mockMobyPlugins := mock_mobypkgwrapper.NewMockPlugins(ctrl)
 	mockCredentialsProvider := app_mocks.NewMockProvider(ctrl)
-	mockPauseLoader := mock_pause.NewMockLoader(ctrl)
+	mockPauseLoader := mock_loader.NewMockLoader(ctrl)
 	conf := &config.Config{
 		PrivilegedDisabled: config.BooleanDefaultFalse{Value: config.ExplicitlyEnabled},
 	}
 
 	mockPauseLoader.EXPECT().IsLoaded(gomock.Any()).Return(true, nil)
-	mockServiceConnectLoader := mock_serviceconnect.NewMockLoader(ctrl)
+	mockServiceConnectLoader := mock_serviceconnect.NewMockManager(ctrl)
 	mockServiceConnectLoader.EXPECT().IsLoaded(gomock.Any()).Return(true, nil).AnyTimes()
 	gomock.InOrder(
 		client.EXPECT().SupportedVersions().Return([]dockerclient.DockerVersion{
@@ -875,13 +874,13 @@ func TestFirelensConfigCapabilitiesUnix(t *testing.T) {
 	// Cancel the context to cancel async routines
 	defer cancel()
 	agent := &ecsAgent{
-		ctx:                  ctx,
-		cfg:                  conf,
-		dockerClient:         client,
-		pauseLoader:          mockPauseLoader,
-		credentialProvider:   aws_credentials.NewCredentials(mockCredentialsProvider),
-		mobyPlugins:          mockMobyPlugins,
-		serviceconnectLoader: mockServiceConnectLoader,
+		ctx:                   ctx,
+		cfg:                   conf,
+		dockerClient:          client,
+		pauseLoader:           mockPauseLoader,
+		credentialProvider:    aws_credentials.NewCredentials(mockCredentialsProvider),
+		mobyPlugins:           mockMobyPlugins,
+		serviceconnectManager: mockServiceConnectLoader,
 	}
 	capabilities, err := agent.capabilities()
 	assert.NoError(t, err)

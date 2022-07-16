@@ -17,13 +17,15 @@ import (
 	apicontainer "github.com/aws/amazon-ecs-agent/agent/api/container"
 	apitask "github.com/aws/amazon-ecs-agent/agent/api/task"
 	"github.com/aws/amazon-ecs-agent/agent/config"
-	"github.com/aws/amazon-ecs-agent/agent/serviceconnect"
-
+	"github.com/aws/amazon-ecs-agent/agent/utils/loader"
 	dockercontainer "github.com/docker/docker/api/types/container"
 )
 
 type Manager interface {
-	AugmentTaskContainer(task *apitask.Task, container *apicontainer.Container, hostConfig *dockercontainer.HostConfig, serviceConnectLoader serviceconnect.Loader) error
-	CreateInstanceTask(config *config.Config, appnetAgentLoader serviceconnect.Loader) (*apitask.Task, error)
+	loader.Loader
+
+	GetLoadedImageName() (string, error)
+	AugmentTaskContainer(task *apitask.Task, container *apicontainer.Container, hostConfig *dockercontainer.HostConfig) error
+	CreateInstanceTask(config *config.Config) (*apitask.Task, error)
 	AugmentInstanceContainer(task *apitask.Task, container *apicontainer.Container, hostConfig *dockercontainer.HostConfig) error
 }

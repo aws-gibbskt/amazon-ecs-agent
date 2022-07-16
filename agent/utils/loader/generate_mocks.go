@@ -11,6 +11,6 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package serviceconnect
+package loader
 
-//go:generate mockgen -destination=mocks/load_mocks.go -copyright_file=../../scripts/copyright_file github.com/aws/amazon-ecs-agent/agent/serviceconnect Loader
+//go:generate mockgen -destination=mocks/load_mocks.go -copyright_file=../../../scripts/copyright_file github.com/aws/amazon-ecs-agent/agent/utils/loader Loader

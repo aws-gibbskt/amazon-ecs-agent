@@ -11,10 +11,7 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package serviceconnect
-
-// https://golang.org/src/syscall/zerrors_linux_386.go#L1382
-const noSuchFile = "no such file or directory"
+package loader
 
 // UnsupportedPlatformError indicates an error when loading appnet container
 // image on an unsupported OS platform

@@ -20,11 +20,8 @@ import (
 	"io/fs"
 	"testing"
 
-	"github.com/golang/mock/gomock"
-
 	apicontainer "github.com/aws/amazon-ecs-agent/agent/api/container"
 	"github.com/aws/amazon-ecs-agent/agent/api/serviceconnect"
-	mock_serviceconnect "github.com/aws/amazon-ecs-agent/agent/serviceconnect/mocks"
 	dockercontainer "github.com/docker/docker/api/types/container"
 	"github.com/stretchr/testify/assert"
 )
@@ -89,23 +86,21 @@ func TestPauseContainerModificationsForServiceConnect(t *testing.T) {
 			testcases = append(testcases, testCase{name: container.Name, container: container, needsImage: container == serviceConnectContainer})
 		}
 	}
-	scManager := NewManager()
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-
-			mockLoader := mock_serviceconnect.NewMockLoader(ctrl)
 			origMkdir := mkdirAllAndChown
 			if tc.needsImage {
 				mkdirAllAndChown = func(path string, perm fs.FileMode, uid, gid int) error {
 					return nil
 				}
-				mockLoader.EXPECT().GetLoadedImageName().Return("container_image:tag", nil)
 			}
 
 			hostConfig := &dockercontainer.HostConfig{}
-			err := scManager.AugmentTaskContainer(scTask, tc.container, hostConfig, mockLoader)
+			scManager := &manager{
+				AgentContainerImageName: agentName,
+				AgentContainerTag:       agentTag,
+			}
+			err := scManager.AugmentTaskContainer(scTask, tc.container, hostConfig)
 			if err != nil {
 				t.Fatal(err)
 			}
