@@ -97,8 +97,8 @@ func TestPauseContainerModificationsForServiceConnect(t *testing.T) {
 
 			hostConfig := &dockercontainer.HostConfig{}
 			scManager := &manager{
-				AgentContainerImageName: agentName,
-				AgentContainerTag:       agentTag,
+				AgentContainerImageName: "container_image",
+				AgentContainerTag:       "tag",
 			}
 			err := scManager.AugmentTaskContainer(scTask, tc.container, hostConfig)
 			if err != nil {
