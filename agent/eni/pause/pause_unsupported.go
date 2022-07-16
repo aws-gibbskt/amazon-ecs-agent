@@ -27,13 +27,13 @@ import (
 )
 
 // LoadImage returns UnsupportedPlatformError on the unsupported platform
-func (*loader) LoadImage(ctx context.Context, cfg *config.Config, dockerClient dockerapi.DockerClient) (*types.ImageInspect, error) {
+func (*pauseLoader) LoadImage(ctx context.Context, cfg *config.Config, dockerClient dockerapi.DockerClient) (*types.ImageInspect, error) {
 	return nil, NewUnsupportedPlatformError(errors.Errorf(
 		"pause container load: unsupported platform: %s/%s",
 		runtime.GOOS, runtime.GOARCH))
 }
 
-func (*loader) IsLoaded(dockerClient dockerapi.DockerClient) (bool, error) {
+func (*pauseLoader) IsLoaded(dockerClient dockerapi.DockerClient) (bool, error) {
 	return false, NewUnsupportedPlatformError(errors.Errorf(
 		"pause container isloaded: unsupported platform: %s/%s",
 		runtime.GOOS, runtime.GOARCH))

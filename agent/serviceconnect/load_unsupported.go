@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"runtime"
 
+	"github.com/aws/amazon-ecs-agent/agent/config"
 	"github.com/aws/amazon-ecs-agent/agent/dockerclient/dockerapi"
 	"github.com/docker/docker/api/types"
 )
@@ -30,7 +31,7 @@ var (
 )
 
 // LoadImage returns UnsupportedPlatformError on the unsupported platform
-func (*loader) LoadImage(ctx context.Context, dockerClient dockerapi.DockerClient) (*types.ImageInspect, error) {
+func (*loader) LoadImage(ctx context.Context, _ *config.Config, dockerClient dockerapi.DockerClient) (*types.ImageInspect, error) {
 	return nil, NewUnsupportedPlatformError(fmt.Errorf(
 		"appnetAgent container load: unsupported platform: %s/%s",
 		runtime.GOOS, runtime.GOARCH))

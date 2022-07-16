@@ -14,12 +14,12 @@
 package serviceconnect
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/aws/amazon-ecs-agent/agent/dockerclient/dockerapi"
 	"github.com/aws/amazon-ecs-agent/agent/logger"
 	"github.com/aws/amazon-ecs-agent/agent/logger/field"
+	utilsloader "github.com/aws/amazon-ecs-agent/agent/utils/loader"
 	"github.com/docker/docker/api/types"
 )
 
@@ -31,8 +31,8 @@ var (
 // Loader defines an interface for loading the appnetAgent container image. This is mostly
 // to facilitate mocking and testing of the LoadImage method
 type Loader interface {
-	LoadImage(ctx context.Context, dockerClient dockerapi.DockerClient) (*types.ImageInspect, error)
-	IsLoaded(dockerClient dockerapi.DockerClient) (bool, error)
+	utilsloader.Loader
+
 	GetLoadedImageName() (string, error)
 }
 
